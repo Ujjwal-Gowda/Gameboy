@@ -198,6 +198,59 @@ void GameBoyColor::OP_0x09() {
     cycles += 8;
 }
 
+void GameBoyColor::OP_0x0A() {
+    uint16_t bc = (B << 8) | C;
+
+    A=memory[bc];
+
+    pc += 1;
+    cycles += 8;
+}
+
+void GameBoyColor::OP_0x0B() {
+    uint16_t bc = (B << 8) | C;
+    bc -=1;  
+    B=(bc >> 8) & 0xFF;
+    C=bc & 0xFF;
+    
+
+    pc += 1;
+    cycles += 8;
+}
+
+void GameBoyColor::OP_0x0C() {
+  bool halfcarry=((C & 0xF) > 0x0F);
+    C+=1;
+
+    setflag(Z, C==0);
+    setflag(N, false);
+    setflag(HC, halfcarry);
+    pc += 1;
+    cycles += 4;
+}
+
+void GameBoyColor::OP_0x0D() {
+  uint8_t oldc= C; 
+    C-=1;
+
+    setflag(Z, C==0);
+    setflag(N, true);
+    setflag(HC, (oldc & 0x0F) == 0);
+    pc += 1;
+    cycles += 4;
+}
+
+void GameBoyColor::OP_0x0F() {
+    uint8_t LSB= A & 0x01;
+    A = (A >> 1) | (LSB<<7);
+    setflag(Z, false);
+    setflag(N, false);
+    setflag(HC, false);
+    setflag(CF, LSB);
+    pc += 1;
+    cycles += 4;
+}
+
 
 int main() {
     GameBoyColor gameboy;
