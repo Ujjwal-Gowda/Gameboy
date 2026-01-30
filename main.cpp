@@ -23,18 +23,24 @@ public:
     void OP_0x01(); 
     void OP_0x02();
     void OP_0x03();
-    void OP_0x04();
-    void OP_0x05();
+
+
+
     void OP_0x06();
     void OP_0x07();
     void OP_0x08();
     void OP_0x09();
     void OP_0x0A();
     void OP_0x0B();
-    void OP_0x0C();
-    void OP_0x0D();
     void OP_0x0E();
     void OP_0x0F();
+
+
+    void NOP();
+    void INC(uint8_t & r);
+    void INC2(uint8_t & r,uint8_t & r1);
+    void DEC(uint8_t & r);
+    void LD_rr_n16(uint8_t & r,uint8_t & r1);
     
   enum flags{
     Z = 0x80,
@@ -70,20 +76,46 @@ void GameBoyColor::step() {
     printf("PC: %04X OPCODE: %02X\n", pc, opcode);
 
     switch (opcode) {
-        case 0x00: OP_0x00(); break;
-        case 0x01:OP_0x01(); break;
+        case 0x00: NOP(); break;
+
+        // LD_rr_n16 
+        case 0x01:LD_rr_n16(B,C); pc+=3; cycles+=12; break;
+        case 0x11:LD_rr_n16(D,E); pc+=3; cycles+=12; break;
+        case 0x21:LD_rr_n16(H,L); pc+=3; cycles+=12; break;
+
         case 0x02:OP_0x02(); break;
-        case 0x03:OP_0x03(); break;
-        case 0x04:OP_0x04(); break;
-        case 0x05:OP_0x05(); break;
+
+        
+        // INC R 
+        case 0x04:INC(B); pc++;cycles+=4; break;
+        case 0x14:INC(D); pc++;cycles+=4; break;
+        case 0x24:INC(H); pc++;cycles+=4; break;
+        case 0x0C:INC(C); pc++;cycles+=4; break;
+        case 0x1C:INC(E); pc++;cycles+=4; break;
+        case 0x2C:INC(L); pc++;cycles+=4; break;
+        case 0x3C:INC(A); pc++;cycles+=4; break;
+
+      
+        // INC AB
+        case 0x03:INC2(B,C);pc+=1;cycles+=8;break;
+        case 0x13:INC2(D,E);pc+=1;cycles+=8;break;
+        case 0x23:INC2(H,L);pc+=1;cycles+=8;break;
+
+        // DEC R
+        case 0x05:DEC(B); pc++;cycles+=4; break;
+        case 0x15:DEC(D); pc++;cycles+=4; break;
+        case 0x25:DEC(H); pc++;cycles+=4; break;
+        case 0x0D:DEC(C); pc++;cycles+=4; break;
+        case 0x1D:DEC(E); pc++;cycles+=4; break;
+        case 0x2D:DEC(L); pc++;cycles+=4; break;
+        case 0x3D:DEC(A); pc++;cycles+=4; break;
+
         case 0x06:OP_0x06(); break;
         case 0x07:OP_0x07(); break;
         case 0x08:OP_0x08(); break;
         case 0x09:OP_0x09(); break;
         case 0x0A:OP_0x0A(); break;
         case 0x0B:OP_0x0B(); break;
-        case 0x0C:OP_0x0C(); break;
-        case 0x0D:OP_0x0D(); break;
         case 0x0E:OP_0x0E(); break;
         case 0x0F:OP_0x0F(); break;
 
@@ -95,58 +127,55 @@ void GameBoyColor::step() {
     }
 }
 
-void GameBoyColor::OP_0x00(){
+void GameBoyColor::NOP(){
      pc += 1;
     cycles += 4;   
 }
 
-void GameBoyColor::OP_0x01(){
+void GameBoyColor::INC(uint8_t & r){
+  uint8_t old=r;
+  ++r;
+
+ bool halfCarry = ( (old & 0x0F)+1) > 0x0F;
+  setflag(Z,r==0 );
+  setflag(N, false);
+  setflag(HC,halfCarry);
+}
+
+
+void GameBoyColor::DEC(uint8_t & r) {
+    uint8_t old = r;
+    r--;
+
+    setflag(Z, r == 0);
+    setflag(N, true);
+    setflag(HC, (old& 0x0F) == 0);
+}
+
+void GameBoyColor::LD_rr_n16(uint8_t & r, uint8_t & r1){
   uint8_t low = memory[pc+1];
   uint8_t high = memory[pc+2];
 
-  B=high;
-  C=low;
-  pc+=2;
-  cycles+=12;
+  r=high;
+  r1=low;
 }
 
-void GameBoyColor::OP_0x02(){
-  uint8_t address =(B<<8)| C   ;
+void GameBoyColor::INC2(uint8_t & r,uint8_t & r1){
+  uint8_t address =(r<<8)| r1   ;
   memory[address]=A;
-  pc+=1;
-  cycles+=8;
 }
 
 void GameBoyColor::OP_0x03(){
 
-  uint8_t BC =(B<<8)| C;
-  BC+=1;
+  uint16_t BC =(B<<8)| C;
+  BC++;
+  B=(BC>>8)& 0xFF;
+  C=BC&0xFF;
   pc+=1;
   cycles+=8;
 }
 
 
-void GameBoyColor::OP_0x04(){
-  uint8_t oldB=B;
-  ++B;
-
- bool halfCarry = ( (oldB & 0x0F)+1) > 0x0F;
-  setflag(Z,B==0 );
-  setflag(N, false);
-  setflag(HC,halfCarry);
-  pc+=1;
-  cycles+=4;
-}
-void GameBoyColor::OP_0x05() {
-    uint8_t oldB = B;
-    B--;
-
-    setflag(Z, B == 0);
-    setflag(N, true);
-    setflag(HC, (oldB & 0x0F) == 0);
-    pc += 1;
-    cycles += 4;
-}
 
 
 void GameBoyColor::OP_0x06() {
@@ -216,28 +245,6 @@ void GameBoyColor::OP_0x0B() {
 
     pc += 1;
     cycles += 8;
-}
-
-void GameBoyColor::OP_0x0C() {
-  bool halfcarry=((C & 0xF) > 0x0F);
-    C+=1;
-
-    setflag(Z, C==0);
-    setflag(N, false);
-    setflag(HC, halfcarry);
-    pc += 1;
-    cycles += 4;
-}
-
-void GameBoyColor::OP_0x0D() {
-  uint8_t oldc= C; 
-    C-=1;
-
-    setflag(Z, C==0);
-    setflag(N, true);
-    setflag(HC, (oldc & 0x0F) == 0);
-    pc += 1;
-    cycles += 4;
 }
 
 void GameBoyColor::OP_0x0F() {
