@@ -43,9 +43,17 @@ public:
     void LD_RRM_A(uint8_t & r,uint8_t & r1);
     void ADD2(uint8_t & r,uint8_t & r1,uint8_t & r2,uint8_t & r3);
     void RLCA();
+    void RLA();
     void RRCA();
     void JR_NZ_e8();
     void JR_NC_e8();
+    void JR_e8();
+    void DAA();
+    void SCF();
+    void JR_C_e8();
+    void JR_Z_e8();
+    void CCF(); 
+    void CPL();
     
     
   enum flags{
@@ -150,6 +158,7 @@ void GameBoyColor::step() {
 
         // RLCA
         case 0x07:RLCA();pc++;cycles+=4; break;
+        case 0x17:RLA();pc++;cycles+=4; break;
         
         // LD_a16_SP
         case 0x08:LD_a16_SP();pc+=3;cycles+=20; break;
@@ -158,6 +167,16 @@ void GameBoyColor::step() {
         case 0x09:ADD2(H,L,B,C);pc+=1;cycles+=8; break;
         case 0x19:ADD2(H,L,D,E);pc+=1;cycles+=8; break;
         case 0x29:ADD2(H,L,H,L);pc+=1;cycles+=8; break;
+
+        
+        case 0x18: JR_e8(); break;
+        case 0x28: JR_Z_e8(); break;
+        case 0x38: JR_C_e8(); break;
+        case 0x27: DAA(); pc++; cycles+=4; break;
+
+        case 0x2F: CPL(); pc++; cycles+=4; break;
+        case 0x37: SCF(); pc++; cycles+=4; break;
+        case 0x3F: CCF(); pc++; cycles+=4; break;
 
         // LD_A_RR
         case 0x0A:LD_A_RR(B,C);pc++;cycles+=8; break;
@@ -299,6 +318,16 @@ void GameBoyColor::RLCA() {
     setflag(CF, MSB);
 }
 
+void GameBoyColor::RLA() {
+  uint8_t oldCF=getflag(CF) ? 1 : 0;
+  uint8_t MSB=(A >>7) & 1;
+    A = (A << 1) | oldCF;
+    setflag(Z, false);
+    setflag(N, false);
+    setflag(HC, false);
+    setflag(CF, MSB);
+}
+
 
 void GameBoyColor::LD_a16_SP() {
     uint16_t address = memory[pc+1] |( memory[pc+2]<<8);
@@ -350,9 +379,9 @@ void GameBoyColor::RRCA() {
 }
 
 void GameBoyColor::JR_NZ_e8(){
-  uint8_t offset = static_cast<uint8_t>(memory[pc++]);
+  uint8_t offset = static_cast<uint8_t>(memory[pc+1]);
 
-  if(!Z){
+  if(!getflag(Z)){
     pc+=offset;
     cycles+=12;
   }else{
@@ -361,14 +390,95 @@ void GameBoyColor::JR_NZ_e8(){
 }
 
 void GameBoyColor::JR_NC_e8(){
-  uint8_t offset = static_cast<uint8_t>(memory[pc++]);
+  uint8_t offset = static_cast<uint8_t>(memory[pc+1]);
 
-  if(!C){
+  if(!getflag(CF)){
     pc+=offset;
     cycles+=12;
   }else{
     cycles+=8;
   }
+}
+
+void GameBoyColor::JR_e8()
+{
+    int8_t offset = static_cast<int8_t>(memory[pc + 1]);
+    pc += 2;
+    pc += offset;
+    cycles += 12;
+}
+
+void GameBoyColor::JR_Z_e8()
+{
+    int8_t offset = static_cast<int8_t>(memory[pc + 1]);
+    pc += 2;
+
+    if (getflag(Z)) {
+        pc += offset;
+        cycles += 12;
+    } else {
+        cycles += 8;
+    }
+}
+
+void GameBoyColor::JR_C_e8()
+{
+    int8_t offset = static_cast<int8_t>(memory[pc + 1]);
+    pc += 2;
+
+    if (getflag(CF)) {
+        pc += offset;
+        cycles += 12;
+    } else {
+        cycles += 8;
+    }
+}
+
+void GameBoyColor::DAA()
+{
+    uint8_t correction = 0;
+    bool carry = getflag(CF);
+
+    if (!getflag(N)) {
+        if (getflag(HC) || (A & 0x0F) > 9)
+            correction |= 0x06;
+        if (carry || A > 0x99) {
+            correction |= 0x60;
+            carry = true;
+        }
+        A += correction;
+    } else {
+        if (getflag(HC))
+            correction |= 0x06;
+        if (carry)
+            correction |= 0x60;
+        A -= correction;
+    }
+
+    setflag(Z, A == 0);
+    setflag(HC, false);
+    setflag(CF, carry);
+}
+
+void GameBoyColor::CCF()
+{
+    setflag(CF, !getflag(CF));
+    setflag(N, false);
+    setflag(HC, false);
+}
+
+void GameBoyColor::SCF()
+{
+    setflag(CF, true);
+    setflag(N, false);
+    setflag(HC, false);
+}
+
+void GameBoyColor::CPL()
+{
+    A = ~A;
+    setflag(N, true);
+    setflag(HC, true);
 }
 
 int main() {
