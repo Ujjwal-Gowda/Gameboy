@@ -3,6 +3,8 @@
 // bool halfBorrow = (a & 0xF) < (b & 0xF);
 #include <cstdint>
 #include <array>
+#include <filesystem>
+#include <functional>
 #include <iostream>
 #include <cstdio>
 #include <cstdlib>
@@ -17,22 +19,34 @@ public:
     std::array<uint8_t, 0x10000> memory{};
 
     GameBoyColor();
+    bool stopped=false;
     void reset();
     void step();
 
     void NOP();
+    void STOP();
     void INC(uint8_t & r);
+    void INCHL();
+    void DEC_HL();
     void INC2(uint8_t & r,uint8_t & r1);
+    void INCSP(uint16_t & r);
     void DEC(uint8_t & r);
     void DEC2(uint8_t & r,uint8_t & r1);
     void LD_rr_n16(uint8_t & r,uint8_t & r1);
+    void LD_SP_n16();
     void LD_r_n8(uint8_t & r);
+    void LD_HL_n8();
     void LD_a16_SP();
     void LD_A_RR(uint8_t & r,uint8_t & r1);
     void LD_RR_A(uint8_t & r,uint8_t & r1);
+    void LD_RRP_A(uint8_t & r,uint8_t & r1);
+    void LD_RRM_A(uint8_t & r,uint8_t & r1);
     void ADD2(uint8_t & r,uint8_t & r1,uint8_t & r2,uint8_t & r3);
     void RLCA();
     void RRCA();
+    void JR_NZ_e8();
+    void JR_NC_e8();
+    
     
   enum flags{
     Z = 0x80,
@@ -66,18 +80,26 @@ void GameBoyColor::reset() {
 void GameBoyColor::step() {
     uint8_t opcode = memory[pc];
     printf("PC: %04X OPCODE: %02X\n", pc, opcode);
-
+    if(stopped){
+      cycles+=4;
+    return ;
+  }
     switch (opcode) {
         case 0x00: NOP(); pc++;cycles+=4;break;
 
+        case 0x10: STOP();pc+=2;cycles+=4;break;
         // LD_rr_n16 
         case 0x01:LD_rr_n16(B,C); pc+=3; cycles+=12; break;
         case 0x11:LD_rr_n16(D,E); pc+=3; cycles+=12; break;
         case 0x21:LD_rr_n16(H,L); pc+=3; cycles+=12; break;
 
+        case 0x31:LD_SP_n16(); pc+=3; cycles+=12; break;
+
         // LD_RR_A
         case 0x02:LD_RR_A(B,C);pc++,cycles+=8; break;
         case 0x12:LD_RR_A(D,E);pc++,cycles+=8; break;
+        case 0x22:LD_RRP_A(H,L);pc++,cycles+=8; break;
+        case 0x32:LD_RRM_A(H,L);pc++,cycles+=8; break;
 
         
         // INC R 
@@ -89,11 +111,14 @@ void GameBoyColor::step() {
         case 0x2C:INC(L); pc++;cycles+=4; break;
         case 0x3C:INC(A); pc++;cycles+=4; break;
 
+        case 0x34:INCHL(); pc++;cycles+=12; break;
+
       
         // INC RR
         case 0x03:INC2(B,C);pc+=1;cycles+=8;break;
         case 0x13:INC2(D,E);pc+=1;cycles+=8;break;
         case 0x23:INC2(H,L);pc+=1;cycles+=8;break;
+        case 0x33:INCSP(sp);pc+=1;cycles+=8;break;
 
         // DEC R
         case 0x05:DEC(B); pc++;cycles+=4; break;
@@ -103,6 +128,8 @@ void GameBoyColor::step() {
         case 0x1D:DEC(E); pc++;cycles+=4; break;
         case 0x2D:DEC(L); pc++;cycles+=4; break;
         case 0x3D:DEC(A); pc++;cycles+=4; break;
+
+        case 0x35:DEC_HL(); pc++;cycles+=12; break;
 
         // DEC RR
         case 0x0B:DEC2(B,C);pc++;cycles+=8; break;
@@ -119,6 +146,8 @@ void GameBoyColor::step() {
         case 0x2E:LD_r_n8(L);pc+=2;cycles+=8; break;
         case 0x3E:LD_r_n8(A);pc+=2;cycles+=8; break;
 
+        case 0x36:LD_HL_n8();pc+=2;cycles+=12; break;
+
         // RLCA
         case 0x07:RLCA();pc++;cycles+=4; break;
         
@@ -134,6 +163,9 @@ void GameBoyColor::step() {
         case 0x0A:LD_A_RR(B,C);pc++;cycles+=8; break;
         case 0x1A:LD_A_RR(D,E);pc++;cycles+=8; break;
         
+        case 0x20:JR_NZ_e8(); break;
+        case 0x30:JR_NC_e8(); break;
+    
         // RRCA
         case 0x0F:RRCA();pc++;cycles+=4; break;
         default:
@@ -145,6 +177,9 @@ void GameBoyColor::step() {
 void GameBoyColor::NOP(){
 }
 
+void GameBoyColor::STOP(){
+  stopped=true;
+}
 
 void GameBoyColor::INC(uint8_t & r){
   uint8_t old=r;
@@ -154,6 +189,20 @@ void GameBoyColor::INC(uint8_t & r){
   setflag(Z,r==0 );
   setflag(N, false);
   setflag(HC,halfCarry);
+}
+
+void GameBoyColor::INCHL()
+{
+    uint16_t addr = (H << 8) | L;
+    uint8_t val = memory[addr];
+
+    bool halfCarry = (val & 0x0F) == 0x0F; 
+    val++;  
+    memory[addr] = val;
+
+    setflag(Z, val == 0);
+    setflag(N, false);
+    setflag(HC, halfCarry);
 }
 
 
@@ -166,6 +215,20 @@ void GameBoyColor::DEC(uint8_t & r) {
     setflag(HC, (old& 0x0F) == 0);
 }
 
+void GameBoyColor::DEC_HL()
+{
+    uint16_t addr = (H << 8) | L;
+    uint8_t val = memory[addr];
+
+    bool halfborrow = (val & 0x0F) == 0; 
+    val--;  
+    memory[addr] = val;
+
+    setflag(Z, val == 0);
+    setflag(N, true);
+    setflag(HC, halfborrow);
+}
+
 void GameBoyColor::LD_rr_n16(uint8_t & r, uint8_t & r1){
   uint8_t low = memory[pc+1];
   uint8_t high = memory[pc+2];
@@ -173,10 +236,32 @@ void GameBoyColor::LD_rr_n16(uint8_t & r, uint8_t & r1){
   r=high;
   r1=low;
 }
+void GameBoyColor::LD_SP_n16(){
+  uint8_t low = memory[pc+1];
+  uint8_t high = memory[pc+2];
+
+  sp =(high<<8)|low;
+}
 
 void GameBoyColor::LD_RR_A(uint8_t & r, uint8_t & r1){
   uint16_t address = (r<<8)|r1;
   memory[address]=A;
+}
+
+void GameBoyColor::LD_RRP_A(uint8_t & r, uint8_t & r1){
+  uint16_t rr1 = (r<<8)|r1;
+  memory[rr1]=A;
+  rr1++;   
+  H = (rr1 >> 8) & 0xFF;
+  L = rr1 & 0xFF;
+}
+
+void GameBoyColor::LD_RRM_A(uint8_t & r, uint8_t & r1){
+  uint16_t rr1 = (r<<8)|r1;
+  memory[rr1]=A;
+  rr1--;   
+  H = (rr1 >> 8) & 0xFF;
+  L = rr1 & 0xFF;
 }
 
 
@@ -188,9 +273,20 @@ void GameBoyColor::INC2(uint8_t & r,uint8_t & r1){
     r1 = rr & 0xFF;
 }
 
+void GameBoyColor::INCSP(uint16_t & r){
+  sp++;
+}
+
 
 void GameBoyColor::LD_r_n8(uint8_t & r) {
     r = memory[pc + 1];
+}
+
+void GameBoyColor::LD_HL_n8() {
+    uint8_t val = memory[pc + 1];
+
+    uint16_t address = (H << 8) | L;
+    memory[address]=val;
 }
 
 
@@ -253,6 +349,27 @@ void GameBoyColor::RRCA() {
     setflag(CF, LSB);
 }
 
+void GameBoyColor::JR_NZ_e8(){
+  uint8_t offset = static_cast<uint8_t>(memory[pc++]);
+
+  if(!Z){
+    pc+=offset;
+    cycles+=12;
+  }else{
+    cycles+=8;
+  }
+}
+
+void GameBoyColor::JR_NC_e8(){
+  uint8_t offset = static_cast<uint8_t>(memory[pc++]);
+
+  if(!C){
+    pc+=offset;
+    cycles+=12;
+  }else{
+    cycles+=8;
+  }
+}
 
 int main() {
     GameBoyColor gameboy;
