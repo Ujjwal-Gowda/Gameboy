@@ -20,15 +20,17 @@ public:
 
     GameBoyColor();
     bool stopped=false;
+    bool halted=false;
     void reset();
     void step();
 
     void NOP();
     void STOP();
+    void HALT();
     void INC(uint8_t & r);
     void INCHL();
-    void DEC_HL();
     void INC2(uint8_t & r,uint8_t & r1);
+    void DEC_HL();
     void INCSP(uint16_t & r);
     void DEC(uint8_t & r);
     void DEC2(uint8_t & r,uint8_t & r1);
@@ -41,6 +43,9 @@ public:
     void LD_RR_A(uint8_t & r,uint8_t & r1);
     void LD_RRP_A(uint8_t & r,uint8_t & r1);
     void LD_RRM_A(uint8_t & r,uint8_t & r1);
+    void LD_R_R(uint8_t & r,uint8_t & r1);
+    void LD_R_HL(uint8_t & r);
+    void LD_HL_R(uint8_t & r);
     void ADD2(uint8_t & r,uint8_t & r1,uint8_t & r2,uint8_t & r3);
     void RLCA();
     void RLA();
@@ -48,10 +53,10 @@ public:
     void JR_NZ_e8();
     void JR_NC_e8();
     void JR_e8();
+    void JR_Z_e8();
+    void JR_C_e8();
     void DAA();
     void SCF();
-    void JR_C_e8();
-    void JR_Z_e8();
     void CCF(); 
     void CPL();
     
@@ -91,6 +96,10 @@ void GameBoyColor::step() {
     if(stopped){
       cycles+=4;
     return ;
+  }
+  if (halted){
+    cycles+=4;
+    return;
   }
     switch (opcode) {
         case 0x00: NOP(); pc++;cycles+=4;break;
@@ -155,7 +164,84 @@ void GameBoyColor::step() {
         case 0x3E:LD_r_n8(A);pc+=2;cycles+=8; break;
 
         case 0x36:LD_HL_n8();pc+=2;cycles+=12; break;
+        
+        // LD_R_R
+        case 0x40: LD_R_R(B, B); pc++; cycles += 4; break;
+        case 0x41: LD_R_R(B, C); pc++; cycles += 4; break;
+        case 0x42: LD_R_R(B, D); pc++; cycles += 4; break;
+        case 0x43: LD_R_R(B, E); pc++; cycles += 4; break;
+        case 0x44: LD_R_R(B, H); pc++; cycles += 4; break;
+        case 0x45: LD_R_R(B, L); pc++; cycles += 4; break;
+        case 0x47: LD_R_R(B, A); pc++; cycles += 4; break;
 
+        case 0x48: LD_R_R(C, B); pc++; cycles += 4; break;
+        case 0x49: LD_R_R(C, C); pc++; cycles += 4; break;
+        case 0x4A: LD_R_R(C, D); pc++; cycles += 4; break;
+        case 0x4B: LD_R_R(C, E); pc++; cycles += 4; break;
+        case 0x4C: LD_R_R(C, H); pc++; cycles += 4; break;
+        case 0x4D: LD_R_R(C, L); pc++; cycles += 4; break;
+        case 0x4F: LD_R_R(C, A); pc++; cycles += 4; break;
+
+        case 0x50: LD_R_R(D, B); pc++; cycles += 4; break;
+        case 0x51: LD_R_R(D, C); pc++; cycles += 4; break;
+        case 0x52: LD_R_R(D, D); pc++; cycles += 4; break;
+        case 0x53: LD_R_R(D, E); pc++; cycles += 4; break;
+        case 0x54: LD_R_R(D, H); pc++; cycles += 4; break;
+        case 0x55: LD_R_R(D, L); pc++; cycles += 4; break;
+        case 0x57: LD_R_R(D, A); pc++; cycles += 4; break;
+
+        case 0x58: LD_R_R(E, B); pc++; cycles += 4; break;
+        case 0x59: LD_R_R(E, C); pc++; cycles += 4; break;
+        case 0x5A: LD_R_R(E, D); pc++; cycles += 4; break;
+        case 0x5B: LD_R_R(E, E); pc++; cycles += 4; break;
+        case 0x5C: LD_R_R(E, H); pc++; cycles += 4; break;
+        case 0x5D: LD_R_R(E, L); pc++; cycles += 4; break;
+        case 0x5F: LD_R_R(E, A); pc++; cycles += 4; break;
+
+        case 0x60: LD_R_R(H, B); pc++; cycles += 4; break;
+        case 0x61: LD_R_R(H, C); pc++; cycles += 4; break;
+        case 0x62: LD_R_R(H, D); pc++; cycles += 4; break;
+        case 0x63: LD_R_R(H, E); pc++; cycles += 4; break;
+        case 0x64: LD_R_R(H, H); pc++; cycles += 4; break;
+        case 0x65: LD_R_R(H, L); pc++; cycles += 4; break;
+        case 0x67: LD_R_R(H, A); pc++; cycles += 4; break;
+
+        case 0x68: LD_R_R(L, B); pc++; cycles += 4; break;
+        case 0x69: LD_R_R(L, C); pc++; cycles += 4; break;
+        case 0x6A: LD_R_R(L, D); pc++; cycles += 4; break;
+        case 0x6B: LD_R_R(L, E); pc++; cycles += 4; break;
+        case 0x6C: LD_R_R(L, H); pc++; cycles += 4; break;
+        case 0x6D: LD_R_R(L, L); pc++; cycles += 4; break;
+        case 0x6F: LD_R_R(L, A); pc++; cycles += 4; break;
+
+        case 0x78: LD_R_R(A, B); pc++; cycles += 4; break;
+        case 0x79: LD_R_R(A, C); pc++; cycles += 4; break;
+        case 0x7A: LD_R_R(A, D); pc++; cycles += 4; break;
+        case 0x7B: LD_R_R(A, E); pc++; cycles += 4; break;
+        case 0x7C: LD_R_R(A, H); pc++; cycles += 4; break;
+        case 0x7D: LD_R_R(A, L); pc++; cycles += 4; break;
+        case 0x7F: LD_R_R(A, A); pc++; cycles += 4; break;
+
+        case 0x46:LD_R_HL(B);pc++;cycles+=8; break;
+        case 0x4E:LD_R_HL(C);pc++;cycles+=8; break;
+        case 0x56:LD_R_HL(D);pc++;cycles+=8; break;
+        case 0x5E:LD_R_HL(E);pc++;cycles+=8; break;
+        case 0x66:LD_R_HL(H);pc++;cycles+=8; break;
+        case 0x6E:LD_R_HL(L);pc++;cycles+=8; break;
+        case 0x7E:LD_R_HL(A);pc++;cycles+=8; break;
+
+        // LD_HL_R
+        case 0x70: LD_HL_R(B); pc++; cycles += 8; break;
+        case 0x71: LD_HL_R(C); pc++; cycles += 8; break;
+        case 0x72: LD_HL_R(D); pc++; cycles += 8; break;
+        case 0x73: LD_HL_R(E); pc++; cycles += 8; break;
+        case 0x74: LD_HL_R(H); pc++; cycles += 8; break;
+        case 0x75: LD_HL_R(L); pc++; cycles += 8; break;
+        case 0x77: LD_HL_R(A); pc++; cycles += 8; break;
+
+
+        case 0x76: HALT(); pc++; cycles += 4; break;
+        
         // RLCA
         case 0x07:RLCA();pc++;cycles+=4; break;
         case 0x17:RLA();pc++;cycles+=4; break;
@@ -172,8 +258,9 @@ void GameBoyColor::step() {
         case 0x18: JR_e8(); break;
         case 0x28: JR_Z_e8(); break;
         case 0x38: JR_C_e8(); break;
-        case 0x27: DAA(); pc++; cycles+=4; break;
 
+
+        case 0x27: DAA(); pc++; cycles+=4; break;
         case 0x2F: CPL(); pc++; cycles+=4; break;
         case 0x37: SCF(); pc++; cycles+=4; break;
         case 0x3F: CCF(); pc++; cycles+=4; break;
@@ -198,6 +285,10 @@ void GameBoyColor::NOP(){
 
 void GameBoyColor::STOP(){
   stopped=true;
+}
+
+void GameBoyColor::HALT(){
+  halted=true;
 }
 
 void GameBoyColor::INC(uint8_t & r){
@@ -299,6 +390,20 @@ void GameBoyColor::INCSP(uint16_t & r){
 
 void GameBoyColor::LD_r_n8(uint8_t & r) {
     r = memory[pc + 1];
+}
+
+void GameBoyColor::LD_R_R(uint8_t & r ,uint8_t & r1) {
+    r = r1;
+}
+
+void GameBoyColor::LD_R_HL(uint8_t & r) {
+  uint16_t HL=(H<<8)|L;
+    r = memory[HL];
+}
+
+void GameBoyColor::LD_HL_R(uint8_t & r) {
+  uint16_t HL=(H<<8)|L;
+  memory[HL]=r;
 }
 
 void GameBoyColor::LD_HL_n8() {
