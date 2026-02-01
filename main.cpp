@@ -34,6 +34,16 @@ public:
     void INCSP(uint16_t & r);
     void DEC(uint8_t & r);
     void DEC2(uint8_t & r,uint8_t & r1);
+    void ADD_A(uint8_t value);
+    void ADC_A(uint8_t value);
+    void ADD_A_HL();
+    void SUB_A(uint8_t value);
+    void SUB_A_HL();
+    void SBC_A(uint8_t value);
+    void AND_A(uint8_t value);
+    void XOR_A(uint8_t value);
+    void OR_A(uint8_t value);
+    void CP_A(uint8_t value);
     void LD_rr_n16(uint8_t & r,uint8_t & r1);
     void LD_SP_n16();
     void LD_r_n8(uint8_t & r);
@@ -242,6 +252,58 @@ void GameBoyColor::step() {
 
         case 0x76: HALT(); pc++; cycles += 4; break;
         
+        // ADD_A  
+        case 0x80: ADD_A(B); pc++; cycles+=4; break;
+        case 0x81: ADD_A(C); pc++; cycles+=4; break;
+        case 0x82: ADD_A(D); pc++; cycles+=4; break;
+        case 0x83: ADD_A(E); pc++; cycles+=4; break;
+        case 0x84: ADD_A(H); pc++; cycles+=4; break;
+        case 0x85: ADD_A(L); pc++; cycles+=4; break;
+        case 0x86: ADD_A(memory[(H<<8)|L]); pc++; cycles+=8; break;
+        case 0x87: ADD_A(A); pc++; cycles+=4; break;
+
+        // ADC A
+        case 0x88: ADC_A(B); pc++; cycles+=4; break;
+        case 0x89: ADC_A(C); pc++; cycles+=4; break;
+        case 0x8A: ADC_A(D); pc++; cycles+=4; break;
+        case 0x8B: ADC_A(E); pc++; cycles+=4; break;
+        case 0x8C: ADC_A(H); pc++; cycles+=4; break;
+        case 0x8D: ADC_A(L); pc++; cycles+=4; break;
+        case 0x8E: ADC_A(memory[(H<<8)|L]); pc++; cycles+=8; break;
+        case 0x8F: ADC_A(A); pc++; cycles+=4; break;
+
+        // SUB A
+        case 0x90: SUB_A(B); pc++; cycles+=4; break;
+        case 0x91: SUB_A(C); pc++; cycles+=4; break;
+        case 0x92: SUB_A(D); pc++; cycles+=4; break;
+        case 0x93: SUB_A(E); pc++; cycles+=4; break;
+        case 0x94: SUB_A(H); pc++; cycles+=4; break;
+        case 0x95: SUB_A(L); pc++; cycles+=4; break;
+        case 0x96: SUB_A(memory[(H<<8)|L]); pc++; cycles+=8; break;
+        case 0x97: SUB_A(A); pc++; cycles+=4; break;
+
+        // SBC A
+        case 0x98: SBC_A(B); pc++; cycles+=4; break;
+        case 0x99: SBC_A(C); pc++; cycles+=4; break;
+        case 0x9A: SBC_A(D); pc++; cycles+=4; break;
+        case 0x9B: SBC_A(E); pc++; cycles+=4; break;
+        case 0x9C: SBC_A(H); pc++; cycles+=4; break;
+        case 0x9D: SBC_A(L); pc++; cycles+=4; break;
+        case 0x9E: SBC_A(memory[(H<<8)|L]); pc++; cycles+=8; break;
+        case 0x9F: SBC_A(A); pc++; cycles+=4; break;
+
+        // AND A
+        case 0xA0: AND_A(B); pc++; cycles+=4; break;
+        case 0xA1: AND_A(C); pc++; cycles+=4; break;
+        case 0xA2: AND_A(D); pc++; cycles+=4; break;
+        case 0xA3: AND_A(E); pc++; cycles+=4; break;
+        case 0xA4: AND_A(H); pc++; cycles+=4; break;
+        case 0xA5: AND_A(L); pc++; cycles+=4; break;
+        case 0xA6: AND_A(memory[(H<<8)|L]); pc++; cycles+=8; break;
+        case 0xA7: AND_A(A); pc++; cycles+=4; break;
+
+
+
         // RLCA
         case 0x07:RLCA();pc++;cycles+=4; break;
         case 0x17:RLA();pc++;cycles+=4; break;
@@ -585,6 +647,103 @@ void GameBoyColor::CPL()
     setflag(N, true);
     setflag(HC, true);
 }
+
+void GameBoyColor::ADD_A(uint8_t value){
+    uint8_t oldA = A;
+    uint16_t result = oldA + value;
+
+    A = result & 0xFF;
+
+    setflag(Z, A==0);
+    setflag(N, false);
+    setflag(HC, ((oldA & 0x0F) + (value & 0x0F)) > 0x0F);
+    setflag(CF, result > 0xFF);
+}
+
+
+void GameBoyColor::SUB_A(uint8_t value){
+    uint8_t oldA = A;
+    uint16_t result = oldA - value;
+
+    A = result & 0xFF;
+
+    setflag(Z, A==0);
+    setflag(N, true);
+    setflag(HC, ((oldA & 0xF) <( value & 0xF)));
+    setflag(CF, oldA < value);
+}
+
+
+void GameBoyColor::ADC_A(uint8_t value){
+    uint8_t oldA = A;
+
+    uint8_t carry = getflag(CF) ? 1 : 0;
+    uint16_t result = oldA + value+carry;
+    A = result & 0xFF;
+
+    setflag(Z, A==0);
+    setflag(N, false);
+    setflag(HC, ((oldA & 0x0F) + (value & 0x0F)+carry) > 0x0F);
+    setflag(CF, result > 0xFF);
+}
+
+void GameBoyColor::SBC_A(uint8_t value){
+    uint8_t oldA = A;
+
+    uint8_t carry = getflag(CF) ? 1 : 0;
+    uint16_t result = oldA - value -carry ;
+
+    A = result & 0xFF;
+
+    setflag(Z, A==0);
+    setflag(N, true);
+    setflag(HC, ((oldA & 0xF) <( value & 0xF)+carry));
+    setflag(CF, oldA < value+ carry);
+}
+
+void GameBoyColor::AND_A(uint8_t value){
+
+    uint16_t result = A & value;
+    A = result & 0xFF;
+
+    setflag(Z, A==0);
+    setflag(N, false);
+    setflag(HC, true);
+    setflag(CF, false);
+}
+
+void GameBoyColor::XOR_A(uint8_t value){
+  
+    uint16_t result = A ^ value;
+    A = result & 0xFF;
+
+    setflag(Z, A==value);
+    setflag(N, false);
+    setflag(HC, false);
+    setflag(CF, false);
+}
+
+void GameBoyColor::OR_A(uint8_t value){
+  
+    uint16_t result = A | value;
+    A = result & 0xFF;
+
+    setflag(Z, A==0);
+    setflag(N, false);
+    setflag(HC, false);
+    setflag(CF, false);
+}
+void GameBoyColor::CP_A(uint8_t value){
+    uint16_t result = A - value;
+
+    result=result & 0xFF;
+
+    setflag(Z, A==0);
+    setflag(N, true);
+    setflag(HC, ((A & 0xF) <( value & 0xF)));
+    setflag(CF, A < value);
+}
+
 
 int main() {
     GameBoyColor gameboy;
