@@ -37,12 +37,14 @@ public:
     void INCHL();
     void INC2(uint8_t & r,uint8_t & r1);
     void DEC_HL();
+    void DEC_SP();
     void INCSP(uint16_t & r);
     void DEC(uint8_t & r);
     void DEC2(uint8_t & r,uint8_t & r1);
     void ADD_A(uint8_t value);
     void ADC_A(uint8_t value);
     void ADD_A_HL();
+    void ADD_HL_SP();
     void SUB_A(uint8_t value);
     void SUB_A_HL();
     void SBC_A(uint8_t value);
@@ -99,6 +101,8 @@ public:
     void LDH_A_C(); 
     void LD_a16_A();
     void LD_A_a16();
+    void LD_A_HLP();
+    void LD_A_HLM();
 
   enum flags{
     Z = 0x80,
@@ -438,6 +442,13 @@ void GameBoyColor::step() {
         case 0xFB: EI(); pc++; cycles += 4; break;
         case 0xFE: CP_A(memory[pc+1]); pc += 2; cycles += 8; break;
         case 0xFF: RST(0x38); cycles += 16; break;
+
+
+        case 0x1F:RRA();pc += 1;cycles += 4;break;
+        case 0x2A:LD_A_HLP();pc += 1;cycles += 8;break;
+        case 0x3A:LD_A_HLM();pc += 1;cycles += 8;break;
+        case 0x39:ADD_HL_SP();pc += 1;cycles += 8;break;
+        case 0x3B:DEC_SP();pc += 1;cycles += 8;break;
         default:
             printf("Unimplemented opcode %02X\n", opcode);
             exit(1);
@@ -1106,7 +1117,46 @@ void GameBoyColor::LD_A_a16() {
     A = memory[addr];
 }
 void GameBoyColor::RRA(){
+  uint8_t oldCarry = getflag(CF);     // 0 or 1
+  uint8_t newCarry = A & 0x01;
+  A = (A >> 1) | (oldCarry << 7);
+  setflag(Z, false);
+  setflag(N, false);
+  setflag(HC, false);
+  setflag(CF, newCarry);
+}
+void GameBoyColor::LD_A_HLP(){
+  uint16_t HL= (H<<8)|L;
+  A=memory[HL];
+  HL++;
+  H = (HL >> 8) & 0xFF;
+  L = HL & 0xFF;
+}
 
+void GameBoyColor::LD_A_HLM(){
+  uint16_t HL= (H<<8)|L;
+  A=memory[HL];
+  HL--;
+  H = (HL >> 8) & 0xFF;
+  L = HL & 0xFF;
+}
+
+void GameBoyColor::ADD_HL_SP(){
+  uint16_t HL = (H << 8) | L;
+  uint32_t result = HL + sp;
+
+  setflag(N, false);
+  setflag(HC, ((HL & 0x0FFF) + (sp & 0x0FFF)) > 0x0FFF);
+  setflag(CF, result > 0xFFFF);
+
+  HL = result & 0xFFFF;
+  H = (HL >> 8) & 0xFF;
+  L = HL & 0xFF;
+}
+
+void GameBoyColor::DEC_SP()
+{
+  sp--
 }
 int main() {
     GameBoyColor gameboy;
