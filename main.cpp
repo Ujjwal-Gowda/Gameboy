@@ -66,6 +66,7 @@ public:
     void RLCA();
     void RLA();
     void RRCA();
+    void RRA();
     void JR_NZ_e8();
     void JR_NC_e8();
     void JR_e8();
@@ -135,10 +136,16 @@ void GameBoyColor::step() {
       cycles+=4;
     return ;
   }
-  if (halted){
-    cycles+=4;
-    return;
-  }
+
+    if (halted) {
+        uint8_t ie = memory[0xFFFF];
+        uint8_t iflag = memory[0xFF0F];
+        if ((ie & iflag) == 0) {
+            cycles += 4;
+            return;
+        }
+        halted = false;
+    }
     switch (opcode) {
         case 0x00: NOP(); pc++;cycles+=4;break;
 
@@ -364,15 +371,108 @@ void GameBoyColor::step() {
     
         // RRCA
         case 0x0F:RRCA();pc++;cycles+=4; break;
+
+        // Cx
+        case 0xC0: RET_cond(condNZ()); pc++; cycles += condNZ() ? 20 : 8; break;
+        case 0xC1: POP(B, C); pc++; cycles += 12; break;
+        case 0xC2: JP_cond_a16(condNZ()); cycles += condNZ() ? 16 : 12; break;
+        case 0xC3: JP_a16(); cycles += 16; break;
+        case 0xC4: CALL_cond_a16(condNZ()); cycles += condNZ() ? 24 : 12; break;
+        case 0xC5: PUSH(B, C); pc++; cycles += 16; break;
+        case 0xC6: ADD_A(memory[pc+1]); pc += 2; cycles += 8; break;
+        case 0xC7: RST(0x00); cycles += 16; break;
+
+        case 0xC8: RET_cond(condZ()); pc++; cycles += condZ() ? 20 : 8; break;
+        case 0xC9: RET(); cycles += 16; break;
+        case 0xCA: JP_cond_a16(condZ()); cycles += condZ() ? 16 : 12; break;
+        case 0xCB: PREFIX_CB(); cycles += 4; break;
+        case 0xCC: CALL_cond_a16(condZ()); cycles += condZ() ? 24 : 12; break;
+        case 0xCD: CALL_a16(); cycles += 24; break;
+        case 0xCE: ADC_A(memory[pc+1]); pc += 2; cycles += 8; break;
+        case 0xCF: RST(0x08); cycles += 16; break;
+
+
+        // Dx
+        case 0xD0: RET_cond(condNC()); pc++; cycles += condNC() ? 20 : 8; break;
+        case 0xD1: POP(D, E); pc++; cycles += 12; break;
+        case 0xD2: JP_cond_a16(condNC()); cycles += condNC() ? 16 : 12; break;
+        case 0xD4: CALL_cond_a16(condNC()); cycles += condNC() ? 24 : 12; break;
+        case 0xD5: PUSH(D, E); pc++; cycles += 16; break;
+        case 0xD6: SUB_A(memory[pc+1]); pc += 2; cycles += 8; break;
+        case 0xD7: RST(0x10); cycles += 16; break;
+
+        case 0xD8: RET_cond(condC()); pc++; cycles += condC() ? 20 : 8; break;
+        case 0xD9: RETI(); cycles += 16; break;
+        case 0xDA: JP_cond_a16(condC()); cycles += condC() ? 16 : 12; break;
+        case 0xDC: CALL_cond_a16(condC()); cycles += condC() ? 24 : 12; break;
+        case 0xDE: SBC_A(memory[pc+1]); pc += 2; cycles += 8; break;
+        case 0xDF: RST(0x18); cycles += 16; break;
+
+        // Ex
+        case 0xE0: LDH_a8_A(); break;
+        case 0xE1: POP(H, L); pc++; cycles += 12; break;
+        case 0xE2: LDH_C_A(); break;
+        case 0xE5: PUSH(H, L); pc++; cycles += 16; break;
+        case 0xE6: AND_A(memory[pc+1]); pc += 2; cycles += 8; break;
+        case 0xE7: RST(0x20); cycles += 16; break;
+
+        case 0xE8: ADD_SP_e8(); break;
+        case 0xE9: JP_HL(); cycles += 4; break;
+        case 0xEA: LD_a16_A(); break;
+        case 0xEE: XOR_A(memory[pc+1]); pc += 2; cycles += 8; break;
+        case 0xEF: RST(0x28); cycles += 16; break;
+
+
+        // Fx
+        case 0xF0: LDH_A_a8(); break;
+        case 0xF1: POP(A, F); F &= 0xF0; pc++; cycles += 12; break;
+        case 0xF2: LDH_A_C(); break;
+        case 0xF3: DI(); pc++; cycles += 4; break;
+        case 0xF5: PUSH(A, F); pc++; cycles += 16; break;
+        case 0xF6: OR_A(memory[pc+1]); pc += 2; cycles += 8; break;
+        case 0xF7: RST(0x30); cycles += 16; break;
+
+        case 0xF8: LD_HL_SP_e8(); break;
+        case 0xF9: LD_SP_HL(); break;
+        case 0xFA: LD_A_a16(); break;
+        case 0xFB: EI(); pc++; cycles += 4; break;
+        case 0xFE: CP_A(memory[pc+1]); pc += 2; cycles += 8; break;
+        case 0xFF: RST(0x38); cycles += 16; break;
         default:
             printf("Unimplemented opcode %02X\n", opcode);
             exit(1);
+
     }
 
 if (ime_delay) {
     ime = true;
     ime_delay = false;
 }
+}
+
+void GameBoyColor::handleInterrupts() {
+    if (!ime) return;
+    uint8_t ie = memory[0xFFFF];
+    uint8_t iflag = memory[0xFF0F];
+
+    uint8_t pending = ie & iflag;
+    if (!pending) return;
+    ime = false;        
+    halted = false;
+
+    for (int i = 0; i < 5; i++) {
+        if (pending & (1 << i)) {
+            memory[0xFF0F] &= ~(1 << i);  
+            uint16_t ret = pc;
+            sp--;
+            memory[sp] = (ret >> 8) & 0xFF;
+            sp--;
+            memory[sp] = ret & 0xFF;
+            pc = 0x40 + i * 8; 
+            cycles += 20;
+            break;
+        }
+    }
 }
 
 void GameBoyColor::NOP(){
@@ -750,7 +850,7 @@ void GameBoyColor::XOR_A(uint8_t value){
     uint16_t result = A ^ value;
     A = result & 0xFF;
 
-    setflag(Z, A==value);
+    setflag(Z, A==0);
     setflag(N, false);
     setflag(HC, false);
     setflag(CF, false);
@@ -886,37 +986,128 @@ void GameBoyColor::EI() {
     ime_delay = true;
 }
 
-void GameBoyColor::handleInterrupts() {
-    if (!ime) return;
+void GameBoyColor::PREFIX_CB() {
+    uint8_t cb = memory[pc + 1];
+    pc += 2;
 
-    uint8_t ie = memory[0xFFFF];
-    uint8_t iflag = memory[0xFF0F];
+    uint8_t *r = nullptr;
+    uint16_t hl = (H << 8) | L;
 
-    uint8_t pending = ie & iflag;
-    if (!pending) return;
+    auto read = [&](uint8_t &v){ return v; };
+    auto write = [&](uint8_t &v, uint8_t val){ v = val; };
 
-    ime = false;        // IME is cleared
-    halted = false;    // HALT exits on interrupt
-
-    // Find lowest-priority interrupt
-    for (int i = 0; i < 5; i++) {
-        if (pending & (1 << i)) {
-            memory[0xFF0F] &= ~(1 << i);  // clear IF bit
-
-            // push PC
-            uint16_t ret = pc;
-            sp--;
-            memory[sp] = (ret >> 8) & 0xFF;
-            sp--;
-            memory[sp] = ret & 0xFF;
-
-            pc = 0x40 + i * 8;   // interrupt vector
-            cycles += 20;
-            break;
+    if ((cb & 0x07) == 6) { // (HL)
+        uint8_t val = memory[hl];
+        r = &val;
+    } else {
+        switch (cb & 0x07) {
+            case 0: r = &B; break;
+            case 1: r = &C; break;
+            case 2: r = &D; break;
+            case 3: r = &E; break;
+            case 4: r = &H; break;
+            case 5: r = &L; break;
+            case 7: r = &A; break;
         }
+    }
+
+    uint8_t op = cb >> 3;
+
+    // ---- BIT ----
+    if (cb >= 0x40 && cb <= 0x7F) {
+        uint8_t bit = (cb >> 3) & 7;
+        uint8_t val = (cb & 7) == 6 ? memory[hl] : *r;
+        setflag(Z, !(val & (1 << bit)));
+        setflag(N, false);
+        setflag(HC, true);
+        cycles += (cb & 7) == 6 ? 12 : 8;
+        return;
+    }
+
+    // ---- RES ----
+    if (cb >= 0x80 && cb <= 0xBF) {
+        uint8_t bit = (cb >> 3) & 7;
+        if ((cb & 7) == 6)
+            memory[hl] &= ~(1 << bit);
+        else
+            *r &= ~(1 << bit);
+        cycles += (cb & 7) == 6 ? 16 : 8;
+        return;
+    }
+
+    // ---- SET ----
+    if (cb >= 0xC0) {
+        uint8_t bit = (cb >> 3) & 7;
+        if ((cb & 7) == 6)
+            memory[hl] |= (1 << bit);
+        else
+            *r |= (1 << bit);
+        cycles += (cb & 7) == 6 ? 16 : 8;
+        return;
     }
 }
 
+void GameBoyColor::ADD_SP_e8() {
+    int8_t e = (int8_t)memory[pc + 1];
+    uint16_t old = sp;
+    uint16_t result = sp + e;
+
+    setflag(Z, false);
+    setflag(N, false);
+    setflag(HC, ((old & 0xF) + (e & 0xF)) > 0xF);
+    setflag(CF, ((old & 0xFF) + (e & 0xFF)) > 0xFF);
+
+    sp = result;
+}
+
+void GameBoyColor::LD_HL_SP_e8() {
+    int8_t e = (int8_t)memory[pc + 1];
+    uint16_t result = sp + e;
+
+    setflag(Z, false);
+    setflag(N, false);
+    setflag(HC, ((sp & 0xF) + (e & 0xF)) > 0xF);
+    setflag(CF, ((sp & 0xFF) + (e & 0xFF)) > 0xFF);
+
+    H = (result >> 8) & 0xFF;
+    L = result & 0xFF;
+
+}
+
+void GameBoyColor::LD_SP_HL() {
+    sp = (H << 8) | L;
+}
+
+void GameBoyColor::LDH_a8_A() {
+    uint8_t a8 = memory[pc + 1];
+    memory[0xFF00 + a8] = A;
+}
+
+void GameBoyColor::LDH_C_A() {
+    memory[0xFF00 + C] = A;
+}
+
+void GameBoyColor::LDH_A_a8() {
+    uint8_t a8 = memory[pc + 1];
+    A = memory[0xFF00 + a8];
+}
+
+void GameBoyColor::LDH_A_C() {
+    A = memory[0xFF00 + C];
+}
+
+void GameBoyColor::LD_a16_A() {
+    uint16_t addr = memory[pc + 1] | (memory[pc + 2] << 8);
+    memory[addr] = A;
+}
+
+void GameBoyColor::LD_A_a16() {
+    uint16_t addr = memory[pc + 1] | (memory[pc + 2] << 8);
+    A = memory[addr];
+}
+void GameBoyColor::RRA(){
+
+}
 int main() {
     GameBoyColor gameboy;
     gameboy.step();
