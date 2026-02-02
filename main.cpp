@@ -21,6 +21,10 @@ public:
     GameBoyColor();
     bool stopped=false;
     bool halted=false;
+    bool condNZ() { return !getflag(Z); } ;
+    bool condZ()  { return  getflag(Z); } ;
+    bool condNC() { return !getflag(CF); } ;
+    bool condC()  { return  getflag(CF); } ;
     void reset();
     void step();
 
@@ -69,8 +73,18 @@ public:
     void SCF();
     void CCF(); 
     void CPL();
-    
-    
+    void RET();
+    void RET_cond(bool cond);
+    void RETI();
+    void JP_a16();
+    void JP_HL();
+    void JP_cond_a16(bool cond); 
+    void CALL_a16(); 
+    void CALL_cond_a16(bool cond); 
+    void RST(uint16_t addr); 
+    void POP(uint16_t& rr); 
+    void PUSH(uint16_t rr);
+
   enum flags{
     Z = 0x80,
     N = 0x40,
@@ -744,6 +758,53 @@ void GameBoyColor::CP_A(uint8_t value){
     setflag(CF, A < value);
 }
 
+void GameBoyColor::RET(){
+    uint8_t low  = memory[sp];
+    sp++;
+    uint8_t high = memory[sp];
+    sp++;
+    uint16_t addr=(high << 8) | low;
+    pc = addr;
+}
+
+void GameBoyColor::RET_cond(bool cond) {
+    if (cond) {
+        RET();
+        cycles += 4;   
+    } else {
+        cycles += 8;
+    }
+}
+
+void GameBoyColor::RETI() {
+    uint8_t low  = memory[sp];
+    sp++;
+    uint8_t high = memory[sp];
+    sp++;
+    uint16_t addr=(high << 8) | low;
+    pc = addr;
+}
+
+void GameBoyColor::JP_a16() {
+    uint8_t low  = memory[pc + 1];
+    uint8_t high = memory[pc + 2];
+    pc = (high << 8) | low;
+}
+
+void GameBoyColor::JP_HL() {
+    uint16_t addr=(H << 8) | L;
+    pc = addr;
+}
+
+void GameBoyColor::JP_cond_a16(bool cond) {
+  if( cond){
+    uint8_t low  = memory[pc + 1];
+    uint8_t high = memory[pc + 2];
+    pc = (high << 8) | low;
+  }else{
+    pc+=3;
+  }
+}
 
 int main() {
     GameBoyColor gameboy;
