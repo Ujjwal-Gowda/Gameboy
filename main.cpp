@@ -3,9 +3,6 @@
 // bool halfBorrow = (a & 0xF) < (b & 0xF);
 #include <cstdint>
 #include <array>
-#include <filesystem>
-#include <functional>
-#include <iostream>
 #include <cstdio>
 #include <cstdlib>
 
@@ -103,6 +100,15 @@ public:
     void LD_A_a16();
     void LD_A_HLP();
     void LD_A_HLM();
+    uint8_t & getCBReg(uint8_t idx, bool& isHL);
+    void RLC(uint8_t& v);
+    void RRC(uint8_t& v);
+    void RL(uint8_t& v);
+    void RR(uint8_t& v);
+    void SLA(uint8_t& v);
+    void SRA(uint8_t& v);
+    void SRL(uint8_t& v);
+    void SWAP(uint8_t& v);
 
   enum flags{
     Z = 0x80,
@@ -997,66 +1003,70 @@ void GameBoyColor::EI() {
     ime_delay = true;
 }
 
+uint8_t& GameBoyColor::getCBReg(uint8_t idx, bool& isHL) {
+    isHL = false;
+    switch (idx) {
+        case 0: return B;
+        case 1: return C;
+        case 2: return D;
+        case 3: return E;
+        case 4: return H;
+        case 5: return L;
+        case 7: return A;
+        default:
+            isHL = true;
+            return memory[(H << 8) | L]; 
+    }
+}
+
 void GameBoyColor::PREFIX_CB() {
     uint8_t cb = memory[pc + 1];
     pc += 2;
 
-    uint8_t *r = nullptr;
-    uint16_t hl = (H << 8) | L;
+    uint8_t reg = cb & 0x07;
+    uint8_t y   = (cb >> 3) & 0x07;
+    uint8_t grp = cb >> 6;
 
-    auto read = [&](uint8_t &v){ return v; };
-    auto write = [&](uint8_t &v, uint8_t val){ v = val; };
+    bool isHL = false;
+    uint8_t& v = getCBReg(reg, isHL);
 
-    if ((cb & 0x07) == 6) { // (HL)
-        uint8_t val = memory[hl];
-        r = &val;
-    } else {
-        switch (cb & 0x07) {
-            case 0: r = &B; break;
-            case 1: r = &C; break;
-            case 2: r = &D; break;
-            case 3: r = &E; break;
-            case 4: r = &H; break;
-            case 5: r = &L; break;
-            case 7: r = &A; break;
+    cycles += isHL ? 16 : 8;
+
+    switch (grp) {
+
+    // ================= ROTATE / SHIFT =================
+    case 0x00:
+        switch (y) {
+            case 0: RLC(v); break;
+            case 1: RRC(v); break;
+            case 2: RL(v);  break;
+            case 3: RR(v);  break;
+            case 4: SLA(v); break;
+            case 5: SRA(v); break;
+            case 6: SWAP(v);break;
+            case 7: SRL(v); break;
         }
-    }
+        break;
 
-    uint8_t op = cb >> 3;
-
-    // ---- BIT ----
-    if (cb >= 0x40 && cb <= 0x7F) {
-        uint8_t bit = (cb >> 3) & 7;
-        uint8_t val = (cb & 7) == 6 ? memory[hl] : *r;
-        setflag(Z, !(val & (1 << bit)));
+    // ================= BIT =================
+    case 0x01:
+        setflag(Z, !(v & (1 << y)));
         setflag(N, false);
         setflag(HC, true);
-        cycles += (cb & 7) == 6 ? 12 : 8;
-        return;
-    }
+        break;
 
-    // ---- RES ----
-    if (cb >= 0x80 && cb <= 0xBF) {
-        uint8_t bit = (cb >> 3) & 7;
-        if ((cb & 7) == 6)
-            memory[hl] &= ~(1 << bit);
-        else
-            *r &= ~(1 << bit);
-        cycles += (cb & 7) == 6 ? 16 : 8;
-        return;
-    }
+    // ================= RES =================
+    case 0x02:
+        v &= ~(1 << y);
+        break;
 
-    // ---- SET ----
-    if (cb >= 0xC0) {
-        uint8_t bit = (cb >> 3) & 7;
-        if ((cb & 7) == 6)
-            memory[hl] |= (1 << bit);
-        else
-            *r |= (1 << bit);
-        cycles += (cb & 7) == 6 ? 16 : 8;
-        return;
+    // ================= SET =================
+    case 0x03:
+        v |= (1 << y);
+        break;
     }
 }
+
 
 void GameBoyColor::ADD_SP_e8() {
     int8_t e = (int8_t)memory[pc + 1];
@@ -1156,7 +1166,88 @@ void GameBoyColor::ADD_HL_SP(){
 
 void GameBoyColor::DEC_SP()
 {
-  sp--
+  sp--;
+}
+
+void GameBoyColor::RLC(uint8_t& v) {
+    uint8_t msb = (v >> 7) & 1;
+    v = (v << 1) | msb;
+    setflag(Z, v == 0);
+    setflag(N, false);
+    setflag(HC, false);
+    setflag(CF, msb);
+}
+
+void GameBoyColor::RRC(uint8_t &v) {
+    uint8_t bit0 = v & 0x01;
+    v = (v >> 1) | (bit0 << 7);
+    setflag(Z, v == 0);
+    setflag(N, false);
+    setflag(HC, false);
+    setflag(CF, bit0);
+}
+void GameBoyColor::RL(uint8_t &v) {
+    uint8_t oldC = getflag(CF);
+    uint8_t bit7 = (v >> 7) & 1;
+
+    v = (v << 1) | oldC;
+
+    setflag(Z, v == 0);
+    setflag(N, false);
+    setflag(HC, false);
+    setflag(CF, bit7);
+}
+
+void GameBoyColor::SLA(uint8_t &v) {
+    uint8_t bit7 = (v >> 7) & 1;
+    v <<= 1;
+
+    setflag(Z, v == 0);
+    setflag(N, false);
+    setflag(HC, false);
+    setflag(CF, bit7);
+}
+
+void GameBoyColor::SRA(uint8_t &v) {
+    uint8_t bit0 = v & 1;
+    uint8_t msb  = v & 0x80;
+
+    v = (v >> 1) | msb;
+
+    setflag(Z, v == 0);
+    setflag(N, false);
+    setflag(HC, false);
+    setflag(CF, bit0);
+}
+void GameBoyColor::RR(uint8_t &v) {
+    uint8_t oldC = getflag(CF);
+    uint8_t bit0 = v & 1;
+
+    v = (v >> 1) | (oldC << 7);
+
+    setflag(Z, v == 0);
+    setflag(N, false);
+    setflag(HC, false);
+    setflag(CF, bit0);
+}
+
+void GameBoyColor::SWAP(uint8_t &v) {
+    v = (v << 4) | (v >> 4);
+
+    setflag(Z, v == 0);
+    setflag(N, false);
+    setflag(HC, false);
+    setflag(CF, false);
+}
+
+void GameBoyColor::SRL(uint8_t &v) {
+    uint8_t bit0 = v & 1;
+    v >>= 1;
+
+    setflag(Z, v == 0);
+    setflag(N, false);
+    setflag(HC, false);
+    setflag(CF, bit0);
 }
 int main() {
     GameBoyColor gameboy;
