@@ -21,13 +21,15 @@ public:
     GameBoyColor();
     bool stopped=false;
     bool halted=false;
+    bool ime = false;
+    bool ime_delay = false;
     bool condNZ() { return !getflag(Z); } ;
     bool condZ()  { return  getflag(Z); } ;
     bool condNC() { return !getflag(CF); } ;
     bool condC()  { return  getflag(CF); } ;
     void reset();
     void step();
-
+    void handleInterrupts();
     void NOP();
     void STOP();
     void HALT();
@@ -82,8 +84,20 @@ public:
     void CALL_a16(); 
     void CALL_cond_a16(bool cond); 
     void RST(uint16_t addr); 
-    void POP(uint16_t& rr); 
-    void PUSH(uint16_t rr);
+    void POP(uint8_t & r, uint8_t & r1); 
+    void PUSH(uint8_t & r,uint8_t & r1);
+    void  DI(); 
+    void EI(); 
+    void PREFIX_CB(); 
+    void ADD_SP_e8(); 
+    void LD_HL_SP_e8(); 
+    void LD_SP_HL(); 
+    void LDH_a8_A(); 
+    void LDH_C_A(); 
+    void LDH_A_a8(); 
+    void LDH_A_C(); 
+    void LD_a16_A();
+    void LD_A_a16();
 
   enum flags{
     Z = 0x80,
@@ -354,6 +368,11 @@ void GameBoyColor::step() {
             printf("Unimplemented opcode %02X\n", opcode);
             exit(1);
     }
+
+if (ime_delay) {
+    ime = true;
+    ime_delay = false;
+}
 }
 
 void GameBoyColor::NOP(){
@@ -752,7 +771,7 @@ void GameBoyColor::CP_A(uint8_t value){
 
     result=result & 0xFF;
 
-    setflag(Z, A==0);
+    setflag(Z,( A-value )==0);
     setflag(N, true);
     setflag(HC, ((A & 0xF) <( value & 0xF)));
     setflag(CF, A < value);
@@ -804,6 +823,98 @@ void GameBoyColor::JP_cond_a16(bool cond) {
   }else{
     pc+=3;
   }
+}
+
+void GameBoyColor::CALL_a16(){
+    uint8_t low  = memory[pc + 1];
+    uint8_t high = memory[pc + 2];
+    uint16_t target = (high << 8) | low;
+    uint16_t ret = pc + 3;
+    sp--;
+    memory[sp] = (ret >> 8) & 0xFF;
+    sp--;
+    memory[sp] = ret & 0xFF;
+    pc = target;
+
+}
+void GameBoyColor::CALL_cond_a16(bool cond){
+  if(cond){
+    uint8_t low  = memory[pc + 1];
+    uint8_t high = memory[pc + 2];
+    uint16_t target = (high << 8) | low;
+    uint16_t ret = pc + 3;
+    sp--;
+    memory[sp] = (ret >> 8) & 0xFF;
+    sp--;
+    memory[sp] = ret & 0xFF;
+    pc = target;
+    }else{
+    pc+=3;
+  }
+}
+
+void GameBoyColor::RST(uint16_t addr){
+  uint16_t ret = pc+1;
+  uint8_t high = (ret>>8) & 0xFF;
+  uint8_t low = ret & 0xFF;
+
+  PUSH(high,low);
+  pc=addr;
+}
+
+void GameBoyColor::PUSH(uint8_t & r,uint8_t & r1 ){
+  sp--;
+  memory[sp]=r;
+  sp--;
+  memory[sp]=r1;
+}
+
+void GameBoyColor::POP(uint8_t & r,uint8_t & r1){
+  uint8_t low =memory[sp];
+  uint8_t high =memory[sp+1];
+  sp+=2;
+  r=high;
+  r1=low;
+}
+
+void GameBoyColor::DI() {
+    ime = false;
+    ime_delay = false;
+}
+
+void GameBoyColor::EI() {
+    ime_delay = true;
+}
+
+void GameBoyColor::handleInterrupts() {
+    if (!ime) return;
+
+    uint8_t ie = memory[0xFFFF];
+    uint8_t iflag = memory[0xFF0F];
+
+    uint8_t pending = ie & iflag;
+    if (!pending) return;
+
+    ime = false;        // IME is cleared
+    halted = false;    // HALT exits on interrupt
+
+    // Find lowest-priority interrupt
+    for (int i = 0; i < 5; i++) {
+        if (pending & (1 << i)) {
+            memory[0xFF0F] &= ~(1 << i);  // clear IF bit
+
+            // push PC
+            uint16_t ret = pc;
+            sp--;
+            memory[sp] = (ret >> 8) & 0xFF;
+            sp--;
+            memory[sp] = ret & 0xFF;
+
+            pc = 0x40 + i * 8;   // interrupt vector
+            cycles += 20;
+            break;
+        }
+    }
 }
 
 int main() {
